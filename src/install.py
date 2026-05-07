@@ -19,10 +19,13 @@ from typing import List, Tuple
 
 # (import_name, pip_package_name, human_label)
 _REQUIRED: List[Tuple[str, str, str]] = [
-    ("PyQt6",   "PyQt6>=6.6.0",   "PyQt6"),
-    ("PIL",     "Pillow>=10.3.0", "Pillow"),
-    ("numpy",   "numpy>=1.26.0",  "NumPy"),
-    ("fitz",    "pymupdf>=1.24.0","PyMuPDF"),
+    ("PyQt6",      "PyQt6>=6.6.0",      "PyQt6"),
+    ("PIL",        "Pillow>=10.3.0",    "Pillow"),
+    ("numpy",      "numpy>=1.26.0",     "NumPy"),
+    ("fitz",       "pymupdf>=1.24.0",   "PyMuPDF"),
+    ("matplotlib", "matplotlib>=3.8.0", "Matplotlib"),
+    ("pandas",     "pandas>=2.1.0",     "pandas"),
+    ("openpyxl",   "openpyxl>=3.1.0",   "openpyxl"),
 ]
 
 

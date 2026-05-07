@@ -4,25 +4,41 @@ pdf_writer.py – PdfWriter class.
 Writes a MultiImage to a PDF file (one image per page).
 Requires PyMuPDF (``pip install pymupdf``).
 
-Page dimensions in the output PDF are set so that one image pixel equals
-one point (1 pt = 1/72 inch) at the default 72 DPI.  Pass a different
-*dpi* value to scale the pages:
+Each image is scaled so its width fits within a standard PDF page width
+(A4 = 595 pt, Letter = 612 pt).  If the image is narrower than the page
+it is left at its natural size.  Height is scaled proportionally.
 
-    width_pt  = image_width  * 72 / dpi
-    height_pt = image_height * 72 / dpi
+Standard page widths in points (1 pt = 1/72 inch)
+--------------------------------------------------
+  A4     : 595 × 842 pt
+  Letter : 612 × 792 pt
+  A3     : 842 × 1191 pt
+  Legal  : 612 × 1008 pt
 """
 from __future__ import annotations
 
 import io
+from typing import Optional
 
 from .multiimage import MultiImage
+
+# Standard page widths in points
+PAGE_WIDTHS_PT = {
+    "A4":     595.0,
+    "Letter": 612.0,
+    "A3":     842.0,
+    "Legal":  612.0,
+}
+_DEFAULT_PAGE = "A4"
 
 
 class PdfWriter:
     """
     Save a :class:`MultiImage` as a multi-page PDF.
 
-    Each :class:`Image` in the collection becomes one page.
+    Each image is scaled so its width fits within *page_format* width
+    (preserving aspect ratio).  Images already narrower than the page
+    are kept at their natural pixel size.
 
     Parameters
     ----------
@@ -32,7 +48,10 @@ class PdfWriter:
         Destination file path (e.g. ``"output/result.pdf"``).
     dpi : int
         Resolution used to convert pixel dimensions to point dimensions.
-        Defaults to 72 (1 pixel = 1 pt).
+        Defaults to 96 (standard screen resolution).
+    page_format : str
+        Maximum page width preset.  One of ``"A4"`` (default),
+        ``"Letter"``, ``"A3"``, ``"Legal"``.
 
     Raises
     ------
@@ -44,20 +63,32 @@ class PdfWriter:
     Examples
     --------
     >>> PdfWriter(mi, "output/result.pdf")
-    >>> PdfWriter(mi, "output/hires.pdf", dpi=150)
+    >>> PdfWriter(mi, "output/letter.pdf", page_format="Letter")
     """
 
     def __init__(
         self,
         multiimage: MultiImage,
         output_path: str,
-        dpi: int = 72,
+        dpi: int = 96,
+        page_format: str = _DEFAULT_PAGE,
     ) -> None:
         if len(multiimage) == 0:
             raise ValueError("MultiImage is empty – nothing to write.")
-        self._write(multiimage, output_path, dpi)
+        if page_format not in PAGE_WIDTHS_PT:
+            raise ValueError(
+                f"Unknown page_format '{page_format}'. "
+                f"Choose from: {list(PAGE_WIDTHS_PT)}"
+            )
+        self._write(multiimage, output_path, dpi, page_format)
 
-    def _write(self, multiimage: MultiImage, output_path: str, dpi: int) -> None:
+    def _write(
+        self,
+        multiimage: MultiImage,
+        output_path: str,
+        dpi: int,
+        page_format: str,
+    ) -> None:
         try:
             import fitz  # PyMuPDF
         except ImportError as exc:
@@ -66,11 +97,23 @@ class PdfWriter:
                 "Install it with:  pip install pymupdf"
             ) from exc
 
+        max_w_pt = PAGE_WIDTHS_PT[page_format]
+
         doc = fitz.open()
         try:
             for img in multiimage:
-                w_pt = img.width * 72 / dpi
-                h_pt = img.height * 72 / dpi
+                # Natural size in points at the given DPI
+                nat_w_pt = img.width  * 72.0 / dpi
+                nat_h_pt = img.height * 72.0 / dpi
+
+                # Scale down if wider than page; never scale up
+                if nat_w_pt > max_w_pt:
+                    scale   = max_w_pt / nat_w_pt
+                    w_pt    = max_w_pt
+                    h_pt    = nat_h_pt * scale
+                else:
+                    w_pt = nat_w_pt
+                    h_pt = nat_h_pt
 
                 page = doc.new_page(width=w_pt, height=h_pt)
 

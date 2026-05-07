@@ -34,6 +34,7 @@ from PyQt6.QtWidgets import (
 from ..back.image_reader import ImageReader
 from ..back.multiimage import MultiImage
 from ..back.pdf_reader import PdfReader
+from ..back.graph_reader import GraphReader, GraphConfig, GRAPH_EXTENSIONS as _GRAPH_EXTS
 
 from .export_bar import ExportBar
 from .file_list_panel import FileListPanel
@@ -49,24 +50,30 @@ from .tools_panel import ToolsPanel
 class _LoadThread(QThread):
     """Load a list of files into a MultiImage in a worker thread."""
 
-    finished = pyqtSignal(object, str)   # (MultiImage | None, error_msg)
+    finished = pyqtSignal(object, object, str)  # (MultiImage|None, source_map|None, error)
 
-    def __init__(self, paths: List[str]):
+    def __init__(self, paths: List[str], graph_config: Optional[GraphConfig] = None):
         super().__init__()
         self._paths = paths
+        self._graph_config = graph_config or GraphConfig()
 
     def run(self):
         try:
             mi = MultiImage()
+            source_map: dict = {}
             for p in self._paths:
                 ext = os.path.splitext(p)[1].lower()
+                start = len(mi)
                 if ext == ".pdf":
                     PdfReader(p, mi)
+                elif ext in _GRAPH_EXTS:
+                    GraphReader(p, mi, config=self._graph_config)
                 else:
                     ImageReader(p, mi)
-            self.finished.emit(mi, "")
-        except Exception as exc:
-            self.finished.emit(None, traceback.format_exc())
+                source_map[p] = list(range(start, len(mi)))
+            self.finished.emit(mi, source_map, "")
+        except Exception:
+            self.finished.emit(None, None, traceback.format_exc())
 
 
 # ------------------------------------------------------------------ #
@@ -78,7 +85,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._mi: Optional[MultiImage] = None
         self._mappings = None
+        self._source_map: dict = {}
         self._loader: Optional[_LoadThread] = None
+        self._graph_config: GraphConfig = GraphConfig()
 
         self.setWindowTitle("Picture — éditeur d'images")
         self.resize(1400, 820)
@@ -160,6 +169,8 @@ class MainWindow(QMainWindow):
         t.sig_recolor_element.connect(self._apply_recolor)
         t.sig_transparent_element.connect(self._apply_transparent_element)
         t.sig_crop.connect(self._apply_crop)
+        t.sig_graph_config_changed.connect(self._on_graph_config_changed)
+        t.sig_target_changed.connect(self._on_target_changed)
 
     # ------------------------------------------------------------------ #
     # File list → reload                                                   #
@@ -178,16 +189,18 @@ class MainWindow(QMainWindow):
             self._loader.quit()
             self._loader.wait()
 
-        self._loader = _LoadThread(paths)
+        self._loader = _LoadThread(paths, self._graph_config)
         self._loader.finished.connect(self._on_load_finished)
         self._loader.start()
 
-    def _on_load_finished(self, mi: Optional[MultiImage], error: str):
+    def _on_load_finished(self, mi: Optional[MultiImage], source_map: Optional[dict], error: str):
         if error:
             self._status.showMessage(f"Erreur : {error.splitlines()[-1]}")
             return
         self._mi = mi
+        self._source_map = source_map or {}
         self._mappings = None
+        self._update_target_list()
         self._refresh_ui()
         n = len(mi) if mi else 0
         self._status.showMessage(
@@ -202,8 +215,9 @@ class MainWindow(QMainWindow):
         self._preview.load_multiimage(self._mi)
         self._export_bar.set_multiimage(self._mi)
         if self._mi and len(self._mi) > 0:
-            img0 = self._mi[0]
-            self._tools.update_image_dimensions(img0.width, img0.height)
+            target = self._tools.get_target_index()
+            ref = target if (target is not None and 0 <= target < len(self._mi)) else 0
+            self._tools.update_image_dimensions(self._mi[ref].width, self._mi[ref].height)
 
     # ------------------------------------------------------------------ #
     # Tool handlers                                                        #
@@ -216,34 +230,130 @@ class MainWindow(QMainWindow):
             return False
         return True
 
+    def _on_graph_config_changed(self, config: GraphConfig):
+        """Re-render graph files when the template changes."""
+        self._graph_config = config
+        paths = self._file_panel.file_paths()
+        graph_paths = [p for p in paths
+                       if os.path.splitext(p)[1].lower() in _GRAPH_EXTS]
+        if not graph_paths:
+            return
+        if self._mi and self._source_map:
+            try:
+                self._partial_graph_reload(graph_paths, config)
+                return
+            except Exception as e:
+                self._status.showMessage(
+                    f"Rechargement partiel échoué ({e}), rechargement complet…"
+                )
+        self._on_files_changed(paths)
+
+    def _partial_graph_reload(self, graph_paths: List[str], config: GraphConfig):
+        """Re-render only graph images, preserving manually edited non-graph images."""
+        replacements: dict = {}
+        for gp in graph_paths:
+            indices = self._source_map.get(gp, [])
+            if not indices:
+                continue
+            tmp = MultiImage()
+            GraphReader(gp, tmp, config=config)
+            if len(tmp) != len(indices):
+                raise ValueError(
+                    f"Nombre d'images changé pour '{os.path.basename(gp)}' "
+                    f"(attendu {len(indices)}, obtenu {len(tmp)})"
+                )
+            for local_i, global_i in enumerate(indices):
+                replacements[global_i] = tmp[local_i]
+        new_mi = MultiImage()
+        for i, img in enumerate(self._mi):
+            new_mi.add_image(replacements.get(i, img))
+        self._mi = new_mi
+        self._mappings = None
+        self._refresh_ui()
+        self._status.showMessage("Graphiques rechargés (modifications préservées).")
+
+    def _update_target_list(self):
+        """Rebuild the image target selector in ToolsPanel."""
+        if not self._mi or len(self._mi) == 0:
+            self._tools.update_target_list([])
+            return
+        idx_to_source: dict = {}
+        for path, indices in self._source_map.items():
+            fname = os.path.basename(path)
+            for i in indices:
+                idx_to_source[i] = fname
+        labels = []
+        for i in range(len(self._mi)):
+            fname = idx_to_source.get(i, "")
+            labels.append(f"Image #{i}  —  {fname}" if fname else f"Image #{i}")
+        self._tools.update_target_list(labels)
+
+    def _scoped_op(self, method: str, *args) -> MultiImage:
+        """Apply a MultiImage batch method to all images or only the selected target."""
+        target = self._tools.get_target_index()
+        if target is None:
+            return getattr(self._mi, method)(*args)
+        tmp = MultiImage()
+        tmp.add_image(self._mi[target])
+        result = getattr(tmp, method)(*args)
+        new_mi = MultiImage()
+        for i, img in enumerate(self._mi):
+            new_mi.add_image(result[0] if i == target else img)
+        return new_mi
+
+    def _scoped_categorize(self, threshold: float) -> list:
+        """Run categorize_by_color scoped to the target, returning a full-length list."""
+        target = self._tools.get_target_index()
+        if target is None:
+            return self._mi.categorize_by_color(threshold)
+        tmp = MultiImage()
+        tmp.add_image(self._mi[target])
+        [single_mapping] = tmp.categorize_by_color(threshold)
+        full_mappings = [{} for _ in range(len(self._mi))]
+        full_mappings[target] = single_mapping
+        return full_mappings
+
+    def _on_target_changed(self, idx):
+        """Called when the user changes the target image selector."""
+        self._mappings = None  # stale; force re-categorize
+        if self._mi and len(self._mi) > 0:
+            ref = idx if (idx is not None and 0 <= idx < len(self._mi)) else 0
+            self._tools.update_image_dimensions(self._mi[ref].width, self._mi[ref].height)
+
     def _apply_compress(self, level: int):
         if not self._guard(): return
         try:
-            self._mi = self._mi.compress(level)
+            self._mi = self._scoped_op("compress", level)
             self._mappings = None
             self._refresh_ui()
-            self._status.showMessage(f"Compression {level} appliquée.")
+            target = self._tools.get_target_index()
+            scope = f"image #{target}" if target is not None else "toutes les images"
+            self._status.showMessage(f"Compression {level} appliquée ({scope}).")
         except Exception as e:
             self._status.showMessage(f"Erreur compression : {e}")
 
     def _apply_to_rgba(self):
         if not self._guard(): return
         try:
-            self._mi = self._mi.to_rgba()
+            self._mi = self._scoped_op("to_rgba")
             self._mappings = None
             self._refresh_ui()
-            self._status.showMessage("Converti en RGBA.")
+            target = self._tools.get_target_index()
+            scope = f"image #{target}" if target is not None else "toutes les images"
+            self._status.showMessage(f"Converti en RGBA ({scope}).")
         except Exception as e:
             self._status.showMessage(f"Erreur RGBA : {e}")
 
     def _apply_make_transparent(self, color: tuple, threshold: float):
         if not self._guard(): return
         try:
-            self._mi = self._mi.make_color_transparent(color, threshold)
+            self._mi = self._scoped_op("make_color_transparent", color, threshold)
             self._mappings = None
             self._refresh_ui()
+            target = self._tools.get_target_index()
+            scope = f"image #{target}" if target is not None else "toutes les images"
             self._status.showMessage(
-                f"Couleur {color} rendue transparente (seuil {threshold})."
+                f"Couleur {color} rendue transparente (seuil {threshold}, {scope})."
             )
         except Exception as e:
             self._status.showMessage(f"Erreur transparence : {e}")
@@ -251,10 +361,13 @@ class MainWindow(QMainWindow):
     def _apply_categorize(self, threshold: float):
         if not self._guard(): return
         try:
-            self._mappings = self._mi.categorize_by_color(threshold)
+            self._mappings = self._scoped_categorize(threshold)
             self._tools.populate_elements(self._mappings)
-            n = len(self._mappings[0]) if self._mappings else 0
-            self._status.showMessage(f"{n} éléments détectés.")
+            target = self._tools.get_target_index()
+            ref = target if (target is not None and target < len(self._mappings)) else 0
+            n = len(self._mappings[ref]) if self._mappings else 0
+            scope = f"image #{target}" if target is not None else "toutes les images"
+            self._status.showMessage(f"{n} éléments détectés ({scope}).")
         except Exception as e:
             self._status.showMessage(f"Erreur catégorisation : {e}")
 
@@ -266,7 +379,9 @@ class MainWindow(QMainWindow):
         try:
             self._mi = self._mi.recolor_element(self._mappings, elem_id, list(color))
             self._refresh_ui()
-            self._status.showMessage(f"Élément #{elem_id} recoloré en {color}.")
+            target = self._tools.get_target_index()
+            scope = f"image #{target}" if target is not None else "toutes les images"
+            self._status.showMessage(f"Élément #{elem_id} recolóré en {color} ({scope}).")
         except Exception as e:
             self._status.showMessage(f"Erreur recoloration : {e}")
 
@@ -278,16 +393,20 @@ class MainWindow(QMainWindow):
         try:
             self._mi = self._mi.make_element_transparent(self._mappings, elem_id)
             self._refresh_ui()
-            self._status.showMessage(f"Élément #{elem_id} rendu transparent.")
+            target = self._tools.get_target_index()
+            scope = f"image #{target}" if target is not None else "toutes les images"
+            self._status.showMessage(f"Élément #{elem_id} rendu transparent ({scope}).")
         except Exception as e:
             self._status.showMessage(f"Erreur transparence élément : {e}")
 
     def _apply_crop(self, x: int, y: int, w: int, h: int):
         if not self._guard(): return
         try:
-            self._mi = self._mi.crop(x, y, w, h)
+            self._mi = self._scoped_op("crop", x, y, w, h)
             self._mappings = None
             self._refresh_ui()
-            self._status.showMessage(f"Rogné : x={x} y={y} {w}×{h}.")
+            target = self._tools.get_target_index()
+            scope = f"image #{target}" if target is not None else "toutes les images"
+            self._status.showMessage(f"Rogné : x={x} y={y} {w}×{h} ({scope}).")
         except Exception as e:
             self._status.showMessage(f"Erreur rognage : {e}")

@@ -7,6 +7,7 @@ Groups all MultiImage operations into collapsible QGroupBox sections:
   3. Make colour transparent
   4. Elements (categorise → recolour / make transparent)
   5. Crop
+  6. Graphiques – template (style, type, taille, DPI, palette)
 
 Each section emits a signal that the MainWindow connects to its
 MultiImage mutation slot.
@@ -18,6 +19,7 @@ from typing import Dict, List, Optional
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QColorDialog,
     QComboBox,
     QDoubleSpinBox,
@@ -82,13 +84,15 @@ class ToolsPanel(QWidget):
     """Right panel – all MultiImage operations."""
 
     # Signals consumed by MainWindow
-    sig_compress            = pyqtSignal(int)             # compression_level
-    sig_to_rgba             = pyqtSignal()
-    sig_make_transparent    = pyqtSignal(tuple, float)    # (r,g,b), threshold
-    sig_categorize          = pyqtSignal(float)           # threshold
-    sig_recolor_element     = pyqtSignal(int, tuple)      # element_id, (r,g,b)
-    sig_transparent_element = pyqtSignal(int)             # element_id
-    sig_crop                = pyqtSignal(int, int, int, int)  # x,y,w,h
+    sig_compress             = pyqtSignal(int)            # compression_level
+    sig_to_rgba              = pyqtSignal()
+    sig_make_transparent     = pyqtSignal(tuple, float)   # (r,g,b), threshold
+    sig_categorize           = pyqtSignal(float)          # threshold
+    sig_recolor_element      = pyqtSignal(int, tuple)     # element_id, (r,g,b)
+    sig_transparent_element  = pyqtSignal(int)            # element_id
+    sig_crop                 = pyqtSignal(int, int, int, int)  # x,y,w,h
+    sig_graph_config_changed = pyqtSignal(object)         # GraphConfig
+    sig_target_changed       = pyqtSignal(object)         # int | None
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -105,6 +109,24 @@ class ToolsPanel(QWidget):
         title.setContentsMargins(8, 8, 8, 4)
         root.addWidget(title)
 
+        # ── target selector ──────────────────────────────────────── #
+        _target_bar = QWidget()
+        _tbar_layout = QHBoxLayout(_target_bar)
+        _tbar_layout.setContentsMargins(8, 2, 8, 4)
+        _tbar_layout.setSpacing(6)
+        _tbar_lbl = QLabel("Cible :")
+        _tbar_lbl.setStyleSheet("color: #cdd6f4; font-size: 12px;")
+        _tbar_layout.addWidget(_tbar_lbl)
+        self._target_combo = QComboBox()
+        self._target_combo.addItem("Toutes les images", None)
+        self._target_combo.setToolTip(
+            "Sélectionner une image spécifique.\n"
+            "Les opérations ne s\'appliqueront qu\'à la cible choisie."
+        )
+        self._target_combo.currentIndexChanged.connect(self._on_target_changed)
+        _tbar_layout.addWidget(self._target_combo, stretch=1)
+        root.addWidget(_target_bar)
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -119,6 +141,7 @@ class ToolsPanel(QWidget):
         inner_layout.addWidget(self._build_make_transparent())
         inner_layout.addWidget(self._build_elements())
         inner_layout.addWidget(self._build_crop())
+        inner_layout.addWidget(self._build_graph_settings())
         inner_layout.addStretch()
 
         scroll.setWidget(inner)
@@ -314,3 +337,119 @@ class ToolsPanel(QWidget):
             # colour swatch via foreground
             item.setForeground(QColor(r, g, b))
             self._elem_list.addItem(item)
+
+    def update_target_list(self, labels: list):
+        """Repopulate the image target combo.  labels[i] is the display text for image i."""
+        self._target_combo.blockSignals(True)
+        prev_idx = self._target_combo.currentIndex()
+        self._target_combo.clear()
+        self._target_combo.addItem("Toutes les images", None)
+        for i, lbl in enumerate(labels):
+            self._target_combo.addItem(lbl, i)
+        if 0 <= prev_idx < self._target_combo.count():
+            self._target_combo.setCurrentIndex(prev_idx)
+        else:
+            self._target_combo.setCurrentIndex(0)
+        self._target_combo.blockSignals(False)
+
+    def get_target_index(self) -> Optional[int]:
+        """Return the selected image index, or None for 'Toutes les images'."""
+        return self._target_combo.currentData()
+
+    def _on_target_changed(self, _: int = 0):
+        self.sig_target_changed.emit(self.get_target_index())
+
+    # ------------------------------------------------------------------ #
+    # Graph settings section                                               #
+    # ------------------------------------------------------------------ #
+
+    def _build_graph_settings(self) -> QGroupBox:
+        from ..back.graph_reader import GRAPH_STYLES, CHART_TYPES, COLORMAPS
+
+        box = QGroupBox("Graphiques – Template")
+        form = QFormLayout(box)
+        form.setSpacing(8)
+
+        # Style
+        self._graph_style = QComboBox()
+        self._graph_style.addItems(GRAPH_STYLES)
+        self._graph_style.setToolTip("Style matplotlib appliqué au graphique")
+        form.addRow("Style :", self._graph_style)
+
+        # Chart type
+        self._graph_type = QComboBox()
+        self._graph_type.addItems(CHART_TYPES)
+        self._graph_type.setToolTip(
+            "Type de graphique ('auto' = détection automatique)"
+        )
+        form.addRow("Type :", self._graph_type)
+
+        # Figure size
+        size_row = QHBoxLayout()
+        self._graph_w = QDoubleSpinBox()
+        self._graph_w.setRange(2.0, 40.0)
+        self._graph_w.setValue(10.0)
+        self._graph_w.setSingleStep(0.5)
+        self._graph_w.setSuffix(" po")
+        self._graph_h = QDoubleSpinBox()
+        self._graph_h.setRange(2.0, 40.0)
+        self._graph_h.setValue(6.0)
+        self._graph_h.setSingleStep(0.5)
+        self._graph_h.setSuffix(" po")
+        size_row.addWidget(self._graph_w)
+        size_row.addWidget(QLabel("×"))
+        size_row.addWidget(self._graph_h)
+        size_widget = QWidget()
+        size_widget.setLayout(size_row)
+        form.addRow("Taille :", size_widget)
+
+        # DPI
+        self._graph_dpi = QSpinBox()
+        self._graph_dpi.setRange(72, 300)
+        self._graph_dpi.setValue(150)
+        self._graph_dpi.setSingleStep(10)
+        self._graph_dpi.setSuffix(" dpi")
+        form.addRow("Résolution :", self._graph_dpi)
+
+        # Colormap / palette
+        self._graph_cmap = QComboBox()
+        self._graph_cmap.addItems(COLORMAPS)
+        self._graph_cmap.setToolTip("Palette de couleurs pour les séries de données")
+        form.addRow("Palette :", self._graph_cmap)
+
+        # Overlap hints
+        self._graph_overlap = QCheckBox("Afficher les superpositions")
+        self._graph_overlap.setToolTip(
+            "Active des aides visuelles quand plusieurs courbes se superposent :\n"
+            "• Styles de ligne alternés (plein / tirets / pointillés)\n"
+            "• Marqueurs différents espacés sur chaque courbe\n"
+            "• Halo semi-transparent derrière chaque tracé\n"
+            "• Hachures sur les barres (bar chart)"
+        )
+        form.addRow(self._graph_overlap)
+
+        # Connect all widgets → emit config on every change
+        for w in (self._graph_style, self._graph_type, self._graph_cmap):
+            w.currentTextChanged.connect(self._emit_graph_config)
+        for w in (self._graph_w, self._graph_h):
+            w.valueChanged.connect(self._emit_graph_config)
+        self._graph_dpi.valueChanged.connect(self._emit_graph_config)
+        self._graph_overlap.checkStateChanged.connect(self._emit_graph_config)
+
+        return box
+
+    def _emit_graph_config(self, *_):
+        self.sig_graph_config_changed.emit(self.get_graph_config())
+
+    def get_graph_config(self):
+        """Return the current :class:`GraphConfig` from the UI state."""
+        from ..back.graph_reader import GraphConfig
+        return GraphConfig(
+            chart_type    = self._graph_type.currentText(),
+            style         = self._graph_style.currentText(),
+            figsize       = (self._graph_w.value(), self._graph_h.value()),
+            dpi           = self._graph_dpi.value(),
+            colormap      = self._graph_cmap.currentText(),
+            overlap_hints = self._graph_overlap.isChecked(),
+        )
+

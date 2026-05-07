@@ -29,8 +29,15 @@ from PyQt6.QtWidgets import (
 )
 
 _SUPPORTED_EXTS = {
+    # Images
     ".png", ".jpg", ".jpeg", ".bmp", ".tiff", ".tif",
-    ".webp", ".gif", ".ico", ".ppm", ".tga", ".pdf",
+    ".webp", ".gif", ".ico", ".ppm", ".tga",
+    # Documents
+    ".pdf",
+    # Data / charts (text)
+    ".csv", ".tsv", ".json", ".xlsx", ".xls",
+    # Data / charts (binary / records)
+    ".rec", ".sec", ".bin",
 }
 
 
@@ -152,8 +159,15 @@ class FileListPanel(QWidget):
             self,
             "Ajouter des fichiers",
             "",
-            "Images & PDF (*.png *.jpg *.jpeg *.bmp *.tiff *.tif "
-            "*.webp *.gif *.ico *.ppm *.tga *.pdf)",
+            "Tous les fichiers supportés ("
+            "*.png *.jpg *.jpeg *.bmp *.tiff *.tif "
+            "*.webp *.gif *.ico *.ppm *.tga "
+            "*.pdf "
+            "*.csv *.tsv *.json *.xlsx *.xls"
+            ");;"
+            "Images (*.png *.jpg *.jpeg *.bmp *.tiff *.tif *.webp *.gif *.ico *.ppm *.tga);;"
+            "PDF (*.pdf);;"
+            "Données / Graphiques (*.csv *.tsv *.json *.xlsx *.xls *.rec *.sec *.bin)",
         )
         for p in paths:
             self._list._add_path(p)
