@@ -384,6 +384,15 @@ class ToolsPanel(QWidget):
         )
         form.addRow("Type :", self._graph_type)
 
+        # X-axis column
+        self._graph_x_col = QComboBox()
+        self._graph_x_col.addItem("Auto", None)
+        self._graph_x_col.setToolTip(
+            "Colonne utilisée comme abscisse (X).\n"
+            "'Auto' laisse le lecteur choisir selon le type de données."
+        )
+        form.addRow("Abscisse (X) :", self._graph_x_col)
+
         # Figure size
         size_row = QHBoxLayout()
         self._graph_w = QDoubleSpinBox()
@@ -428,13 +437,45 @@ class ToolsPanel(QWidget):
         )
         form.addRow(self._graph_overlap)
 
+        # ── Axis limits ────────────────────────────────────────────── #
+        def _axis_limit_row(label: str):
+            """Return (layout, enable_checkbox, min_spin, max_spin)."""
+            cb   = QCheckBox("Activer")
+            lo   = QDoubleSpinBox()
+            hi   = QDoubleSpinBox()
+            for sp in (lo, hi):
+                sp.setRange(-1e9, 1e9)
+                sp.setDecimals(4)
+                sp.setSingleStep(1.0)
+                sp.setEnabled(False)
+            cb.toggled.connect(lo.setEnabled)
+            cb.toggled.connect(hi.setEnabled)
+            row = QHBoxLayout()
+            row.addWidget(cb)
+            row.addWidget(QLabel("min"))
+            row.addWidget(lo, stretch=1)
+            row.addWidget(QLabel("max"))
+            row.addWidget(hi, stretch=1)
+            w = QWidget()
+            w.setLayout(row)
+            form.addRow(label, w)
+            return cb, lo, hi
+
+        self._xlim_cb, self._xlim_min, self._xlim_max = _axis_limit_row("Axe X :")
+        self._ylim_cb, self._ylim_min, self._ylim_max = _axis_limit_row("Axe Y :")
+
         # Connect all widgets → emit config on every change
-        for w in (self._graph_style, self._graph_type, self._graph_cmap):
+        for w in (self._graph_style, self._graph_type, self._graph_cmap,
+                  self._graph_x_col):
             w.currentTextChanged.connect(self._emit_graph_config)
-        for w in (self._graph_w, self._graph_h):
+        for w in (self._graph_w, self._graph_h,
+                  self._xlim_min, self._xlim_max,
+                  self._ylim_min, self._ylim_max):
             w.valueChanged.connect(self._emit_graph_config)
         self._graph_dpi.valueChanged.connect(self._emit_graph_config)
         self._graph_overlap.checkStateChanged.connect(self._emit_graph_config)
+        self._xlim_cb.toggled.connect(self._emit_graph_config)
+        self._ylim_cb.toggled.connect(self._emit_graph_config)
 
         return box
 
@@ -451,5 +492,25 @@ class ToolsPanel(QWidget):
             dpi           = self._graph_dpi.value(),
             colormap      = self._graph_cmap.currentText(),
             overlap_hints = self._graph_overlap.isChecked(),
+            x_col         = self._graph_x_col.currentData(),
+            x_min         = self._xlim_min.value() if self._xlim_cb.isChecked() else None,
+            x_max         = self._xlim_max.value() if self._xlim_cb.isChecked() else None,
+            y_min         = self._ylim_min.value() if self._ylim_cb.isChecked() else None,
+            y_max         = self._ylim_max.value() if self._ylim_cb.isChecked() else None,
         )
+
+    def update_graph_columns(self, columns: list):
+        """Populate the X-axis column combo with *columns*."""
+        self._graph_x_col.blockSignals(True)
+        prev = self._graph_x_col.currentData()  # preserve current selection
+        self._graph_x_col.clear()
+        self._graph_x_col.addItem("Auto", None)
+        for col in columns:
+            self._graph_x_col.addItem(str(col), str(col))
+        # Restore previous selection if still present
+        if prev is not None:
+            idx = self._graph_x_col.findData(prev)
+            if idx >= 0:
+                self._graph_x_col.setCurrentIndex(idx)
+        self._graph_x_col.blockSignals(False)
 

@@ -114,6 +114,11 @@ class GraphConfig:
     y_label:        str = ""
     grid:           bool = True
     overlap_hints:  bool = False
+    x_col:          Optional[str] = None   # user-forced X-axis column (None = auto)
+    x_min:          Optional[float] = None # forced X-axis minimum (None = auto)
+    x_max:          Optional[float] = None # forced X-axis maximum (None = auto)
+    y_min:          Optional[float] = None # forced Y-axis minimum (None = auto)
+    y_max:          Optional[float] = None # forced Y-axis maximum (None = auto)
 
 
 # ------------------------------------------------------------------ #
@@ -381,6 +386,25 @@ def _render_figure(df, config: GraphConfig, x_col, y_cols,
         if config.grid and chart_type not in ("pie",):
             ax.grid(True, alpha=0.3)
 
+        # ── forced axis limits ────────────────────────────────────── #
+        if chart_type not in ("pie",):
+            xlim_lo = config.x_min
+            xlim_hi = config.x_max
+            if xlim_lo is not None or xlim_hi is not None:
+                cur_lo, cur_hi = ax.get_xlim()
+                ax.set_xlim(
+                    xlim_lo if xlim_lo is not None else cur_lo,
+                    xlim_hi if xlim_hi is not None else cur_hi,
+                )
+            ylim_lo = config.y_min
+            ylim_hi = config.y_max
+            if ylim_lo is not None or ylim_hi is not None:
+                cur_lo, cur_hi = ax.get_ylim()
+                ax.set_ylim(
+                    ylim_lo if ylim_lo is not None else cur_lo,
+                    ylim_hi if ylim_hi is not None else cur_hi,
+                )
+
         fig.tight_layout()
         canvas.draw()
 
@@ -393,7 +417,9 @@ def _df_to_image(df, config: GraphConfig,
                  x_override=None, y_override=None,
                  title="", x_label="", y_label="") -> Image:
     """Convert a DataFrame to an Image using config."""
-    x_col, y_cols = _pick_columns(df, x_override, y_override)
+    # caller (e.g. JSON schema) takes priority; fall back to config.x_col
+    x_ov = x_override if x_override is not None else config.x_col
+    x_col, y_cols = _pick_columns(df, x_ov, y_override)
     arr = _render_figure(df, config, x_col, y_cols,
                          title=title, x_label=x_label, y_label=y_label)
     return Image(arr)
@@ -438,6 +464,79 @@ class GraphReader:
         )
         self._config = config or GraphConfig()
         self._load(path)
+
+    @staticmethod
+    def read_columns(path: str) -> List[str]:
+        """
+        Return the column names found in *path* without rendering a chart.
+
+        Returns an empty list if the format is unsupported or an error occurs.
+        """
+        try:
+            import pandas as pd
+            ext = os.path.splitext(path)[1].lower()
+
+            if ext in (".csv", ".tsv"):
+                with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+                    sample = f.read(4096)
+                sep = "\t" if sample.count("\t") > sample.count(",") else ","
+                return list(pd.read_csv(path, sep=sep, encoding="utf-8-sig",
+                                        nrows=0).columns)
+
+            if ext == ".json":
+                with open(path, "r", encoding="utf-8") as f:
+                    schema = json.load(f)
+                if "source" in schema:
+                    src = os.path.join(os.path.dirname(path), schema["source"])
+                    return list(pd.read_csv(src, nrows=0).columns)
+                if "data" in schema and schema["data"]:
+                    return list(pd.DataFrame(schema["data"][:1]).columns)
+                return []
+
+            if ext in (".xlsx", ".xls"):
+                try:
+                    xl = pd.ExcelFile(path, engine="openpyxl")
+                except Exception:
+                    xl = pd.ExcelFile(path)
+                cols: List[str] = []
+                for sheet in xl.sheet_names:
+                    for c in xl.parse(sheet, nrows=0).columns:
+                        if c not in cols:
+                            cols.append(c)
+                return cols
+
+            if ext in (".rec", ".sec"):
+                import io as _io
+                with open(path, "r", encoding="utf-8-sig", errors="replace") as f:
+                    lines = [l for l in f if not l.lstrip().startswith(("#", "%"))]
+                if not lines:
+                    return []
+                sample2 = "".join(lines[:10])
+                counts = {s: sample2.count(s) for s in ("\t", ",", ";", " ")}
+                sep2 = max(counts, key=counts.get)
+                if sep2 == " ":
+                    sep2 = r"\s+"
+                return list(pd.read_csv(_io.StringIO("".join(lines)),
+                                        sep=sep2, engine="python", nrows=0).columns)
+
+            if ext == ".bin":
+                try:
+                    arr = np.load(path, allow_pickle=False)
+                    n = 1 if arr.ndim == 1 else arr.shape[1]
+                    return [f"ch_{i}" for i in range(n)]
+                except Exception:
+                    pass
+                raw = np.fromfile(path, dtype="<f8")
+                for n in (1, 2, 3, 4, 6, 8, 12, 16):
+                    if raw.size % n == 0:
+                        break
+                else:
+                    n = 1
+                return [f"ch_{i}" for i in range(n)]
+
+        except Exception:
+            pass
+        return []
 
     # ---------------------------------------------------------------- #
 

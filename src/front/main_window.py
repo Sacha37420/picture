@@ -201,6 +201,7 @@ class MainWindow(QMainWindow):
         self._source_map = source_map or {}
         self._mappings = None
         self._update_target_list()
+        self._update_graph_columns()
         self._refresh_ui()
         n = len(mi) if mi else 0
         self._status.showMessage(
@@ -271,6 +272,19 @@ class MainWindow(QMainWindow):
         self._mappings = None
         self._refresh_ui()
         self._status.showMessage("Graphiques rechargés (modifications préservées).")
+
+    def _update_graph_columns(self):
+        """Collect column names from all loaded graph files and populate the X combo."""
+        all_cols: List[str] = []
+        for path in self._source_map:
+            if os.path.splitext(path)[1].lower() in _GRAPH_EXTS:
+                try:
+                    for col in GraphReader.read_columns(path):
+                        if col not in all_cols:
+                            all_cols.append(col)
+                except Exception:
+                    pass
+        self._tools.update_graph_columns(all_cols)
 
     def _update_target_list(self):
         """Rebuild the image target selector in ToolsPanel."""
