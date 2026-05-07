@@ -155,8 +155,10 @@ class ToolsPanel(QWidget):
         box = QGroupBox("Compression")
         layout = QFormLayout(box)
         layout.setSpacing(8)
+        layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
 
         self._compress_combo = QComboBox()
+        self._compress_combo.setMaximumWidth(130)
         _levels = [4, 9, 16, 25, 36, 49, 64]
         for lvl in _levels:
             import math
@@ -183,6 +185,7 @@ class ToolsPanel(QWidget):
         box = QGroupBox("Rendre une couleur transparente")
         form = QFormLayout(box)
         form.setSpacing(8)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
 
         self._transp_color_btn = _ColorButton(QColor(255, 255, 255))
         form.addRow("Couleur :", self._transp_color_btn)
@@ -193,6 +196,7 @@ class ToolsPanel(QWidget):
         self._transp_threshold.setSingleStep(5.0)
         self._transp_threshold.setDecimals(1)
         self._transp_threshold.setSuffix("  distance")
+        self._transp_threshold.setMaximumWidth(120)
         form.addRow("Seuil :", self._transp_threshold)
 
         btn = QPushButton("Appliquer")
@@ -207,12 +211,14 @@ class ToolsPanel(QWidget):
         layout.setSpacing(8)
 
         form = QFormLayout()
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
         self._cat_threshold = QDoubleSpinBox()
         self._cat_threshold.setRange(0.0, 441.0)
         self._cat_threshold.setValue(30.0)
         self._cat_threshold.setSingleStep(5.0)
         self._cat_threshold.setDecimals(1)
         self._cat_threshold.setSuffix("  distance")
+        self._cat_threshold.setMaximumWidth(120)
         form.addRow("Seuil :", self._cat_threshold)
         layout.addLayout(form)
 
@@ -223,6 +229,12 @@ class ToolsPanel(QWidget):
         self._elem_list = QListWidget()
         self._elem_list.setMinimumHeight(100)
         self._elem_list.setMaximumHeight(160)
+        self._elem_list.setMinimumWidth(0)
+        self._elem_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._elem_list.setTextElideMode(Qt.TextElideMode.ElideRight)
+        self._elem_list.setSizePolicy(
+            QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Fixed
+        )
         layout.addWidget(self._elem_list)
 
         # recolour row
@@ -244,11 +256,12 @@ class ToolsPanel(QWidget):
         box = QGroupBox("Rogner")
         form = QFormLayout(box)
         form.setSpacing(8)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
 
-        self._crop_x = QSpinBox(); self._crop_x.setRange(0, 99999)
-        self._crop_y = QSpinBox(); self._crop_y.setRange(0, 99999)
-        self._crop_w = QSpinBox(); self._crop_w.setRange(1, 99999); self._crop_w.setValue(100)
-        self._crop_h = QSpinBox(); self._crop_h.setRange(1, 99999); self._crop_h.setValue(100)
+        self._crop_x = QSpinBox(); self._crop_x.setRange(0, 99999); self._crop_x.setMaximumWidth(90)
+        self._crop_y = QSpinBox(); self._crop_y.setRange(0, 99999); self._crop_y.setMaximumWidth(90)
+        self._crop_w = QSpinBox(); self._crop_w.setRange(1, 99999); self._crop_w.setValue(100); self._crop_w.setMaximumWidth(90)
+        self._crop_h = QSpinBox(); self._crop_h.setRange(1, 99999); self._crop_h.setValue(100); self._crop_h.setMaximumWidth(90)
 
         form.addRow("X :", self._crop_x)
         form.addRow("Y :", self._crop_y)
@@ -331,7 +344,7 @@ class ToolsPanel(QWidget):
             r, g, b = int(avg[0]), int(avg[1]), int(avg[2])
             n_pixels = sum(len(m[eid]["pixels"]) for m in mappings if eid in m)
             item = QListWidgetItem(
-                f"  Élément #{eid}   RGB({r},{g},{b})   {n_pixels} px"
+                f"#{eid}  RGB({r},{g},{b})  {n_pixels}px"
             )
             item.setData(Qt.ItemDataRole.UserRole, eid)
             # colour swatch via foreground
@@ -369,16 +382,19 @@ class ToolsPanel(QWidget):
         box = QGroupBox("Graphiques – Template")
         form = QFormLayout(box)
         form.setSpacing(8)
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.FieldsStayAtSizeHint)
 
         # Style
         self._graph_style = QComboBox()
         self._graph_style.addItems(GRAPH_STYLES)
+        self._graph_style.setMaximumWidth(150)
         self._graph_style.setToolTip("Style matplotlib appliqué au graphique")
         form.addRow("Style :", self._graph_style)
 
         # Chart type
         self._graph_type = QComboBox()
         self._graph_type.addItems(CHART_TYPES)
+        self._graph_type.setMaximumWidth(150)
         self._graph_type.setToolTip(
             "Type de graphique ('auto' = détection automatique)"
         )
@@ -387,6 +403,7 @@ class ToolsPanel(QWidget):
         # X-axis column
         self._graph_x_col = QComboBox()
         self._graph_x_col.addItem("Auto", None)
+        self._graph_x_col.setMaximumWidth(150)
         self._graph_x_col.setToolTip(
             "Colonne utilisée comme abscisse (X).\n"
             "'Auto' laisse le lecteur choisir selon le type de données."
@@ -394,22 +411,32 @@ class ToolsPanel(QWidget):
         form.addRow("Abscisse (X) :", self._graph_x_col)
 
         # Figure size
-        size_row = QHBoxLayout()
         self._graph_w = QDoubleSpinBox()
         self._graph_w.setRange(2.0, 40.0)
         self._graph_w.setValue(10.0)
         self._graph_w.setSingleStep(0.5)
         self._graph_w.setSuffix(" po")
+        self._graph_w.setMaximumWidth(90)
         self._graph_h = QDoubleSpinBox()
         self._graph_h.setRange(2.0, 40.0)
         self._graph_h.setValue(6.0)
         self._graph_h.setSingleStep(0.5)
         self._graph_h.setSuffix(" po")
-        size_row.addWidget(self._graph_w)
-        size_row.addWidget(QLabel("×"))
-        size_row.addWidget(self._graph_h)
+        self._graph_h.setMaximumWidth(90)
+        size_col = QVBoxLayout()
+        size_col.setSpacing(3)
+        size_col.setContentsMargins(0, 0, 0, 0)
+        for lbl_txt, sp in (("larg.", self._graph_w), ("haut.", self._graph_h)):
+            r = QHBoxLayout()
+            r.setSpacing(4)
+            l = QLabel(lbl_txt)
+            l.setFixedWidth(30)
+            r.addWidget(l)
+            r.addWidget(sp)
+            r.addStretch()
+            size_col.addLayout(r)
         size_widget = QWidget()
-        size_widget.setLayout(size_row)
+        size_widget.setLayout(size_col)
         form.addRow("Taille :", size_widget)
 
         # DPI
@@ -418,11 +445,13 @@ class ToolsPanel(QWidget):
         self._graph_dpi.setValue(150)
         self._graph_dpi.setSingleStep(10)
         self._graph_dpi.setSuffix(" dpi")
+        self._graph_dpi.setMaximumWidth(90)
         form.addRow("Résolution :", self._graph_dpi)
 
         # Colormap / palette
         self._graph_cmap = QComboBox()
         self._graph_cmap.addItems(COLORMAPS)
+        self._graph_cmap.setMaximumWidth(150)
         self._graph_cmap.setToolTip("Palette de couleurs pour les séries de données")
         form.addRow("Palette :", self._graph_cmap)
 
@@ -439,25 +468,33 @@ class ToolsPanel(QWidget):
 
         # ── Axis limits ────────────────────────────────────────────── #
         def _axis_limit_row(label: str):
-            """Return (layout, enable_checkbox, min_spin, max_spin)."""
-            cb   = QCheckBox("Activer")
-            lo   = QDoubleSpinBox()
-            hi   = QDoubleSpinBox()
+            """Return (enable_checkbox, min_spin, max_spin)."""
+            cb = QCheckBox("Activer")
+            lo = QDoubleSpinBox()
+            hi = QDoubleSpinBox()
             for sp in (lo, hi):
                 sp.setRange(-1e9, 1e9)
-                sp.setDecimals(4)
+                sp.setDecimals(2)
                 sp.setSingleStep(1.0)
                 sp.setEnabled(False)
+                sp.setMaximumWidth(90)
             cb.toggled.connect(lo.setEnabled)
             cb.toggled.connect(hi.setEnabled)
-            row = QHBoxLayout()
-            row.addWidget(cb)
-            row.addWidget(QLabel("min"))
-            row.addWidget(lo, stretch=1)
-            row.addWidget(QLabel("max"))
-            row.addWidget(hi, stretch=1)
+            # vertical layout: checkbox / min row / max row
+            col = QVBoxLayout()
+            col.setSpacing(2)
+            col.setContentsMargins(0, 0, 0, 0)
+            col.addWidget(cb)
+            for lbl_txt, sp in (("min", lo), ("max", hi)):
+                r = QHBoxLayout()
+                r.setSpacing(4)
+                lbl = QLabel(lbl_txt)
+                lbl.setFixedWidth(24)
+                r.addWidget(lbl)
+                r.addWidget(sp, stretch=1)
+                col.addLayout(r)
             w = QWidget()
-            w.setLayout(row)
+            w.setLayout(col)
             form.addRow(label, w)
             return cb, lo, hi
 

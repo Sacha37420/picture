@@ -90,7 +90,7 @@ class MainWindow(QMainWindow):
         self._graph_config: GraphConfig = GraphConfig()
 
         self.setWindowTitle("Picture — éditeur d'images")
-        self.resize(1400, 820)
+        self.resize(1400, 720)
         self.setMinimumSize(900, 600)
         self.setStyleSheet(MAIN_STYLE)
 
