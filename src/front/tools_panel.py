@@ -91,6 +91,8 @@ class ToolsPanel(QWidget):
     sig_recolor_element      = pyqtSignal(int, tuple)     # element_id, (r,g,b)
     sig_transparent_element  = pyqtSignal(int)            # element_id
     sig_crop                 = pyqtSignal(int, int, int, int)  # x,y,w,h
+    sig_crop_preview         = pyqtSignal(int, int, int, int)  # x,y,w,h (live)
+    sig_element_selected     = pyqtSignal(object)         # int | None
     sig_graph_config_changed = pyqtSignal(object)         # GraphConfig
     sig_target_changed       = pyqtSignal(object)         # int | None
 
@@ -237,6 +239,8 @@ class ToolsPanel(QWidget):
         )
         layout.addWidget(self._elem_list)
 
+        self._elem_list.currentRowChanged.connect(self._emit_element_selected)
+
         # recolour row
         recolor_row = QHBoxLayout()
         self._recolor_btn_color = _ColorButton(QColor(200, 50, 50))
@@ -267,6 +271,9 @@ class ToolsPanel(QWidget):
         form.addRow("Y :", self._crop_y)
         form.addRow("Largeur :", self._crop_w)
         form.addRow("Hauteur :", self._crop_h)
+
+        for sb in (self._crop_x, self._crop_y, self._crop_w, self._crop_h):
+            sb.valueChanged.connect(self._emit_crop_preview)
 
         btn = QPushButton("Rogner")
         btn.setObjectName("accent")
@@ -313,6 +320,23 @@ class ToolsPanel(QWidget):
             self._crop_y.value(),
             self._crop_w.value(),
             self._crop_h.value(),
+        )
+
+    def _emit_crop_preview(self, _=None):
+        self.sig_crop_preview.emit(
+            self._crop_x.value(),
+            self._crop_y.value(),
+            self._crop_w.value(),
+            self._crop_h.value(),
+        )
+
+    def _emit_element_selected(self, row: int):
+        if row < 0:
+            self.sig_element_selected.emit(None)
+            return
+        item = self._elem_list.item(row)
+        self.sig_element_selected.emit(
+            item.data(Qt.ItemDataRole.UserRole) if item else None
         )
 
     # ------------------------------------------------------------------ #

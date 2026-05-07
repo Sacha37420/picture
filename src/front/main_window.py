@@ -20,6 +20,8 @@ import os
 import traceback
 from typing import List, Optional
 
+import numpy as np
+
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtWidgets import (
     QFrame,
@@ -169,6 +171,8 @@ class MainWindow(QMainWindow):
         t.sig_recolor_element.connect(self._apply_recolor)
         t.sig_transparent_element.connect(self._apply_transparent_element)
         t.sig_crop.connect(self._apply_crop)
+        t.sig_crop_preview.connect(self._on_crop_preview)
+        t.sig_element_selected.connect(self._on_element_selected)
         t.sig_graph_config_changed.connect(self._on_graph_config_changed)
         t.sig_target_changed.connect(self._on_target_changed)
 
@@ -213,7 +217,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ #
 
     def _refresh_ui(self):
-        self._preview.load_multiimage(self._mi)
+        self._preview.load_multiimage(self._mi)   # efface aussi les overlays
         self._export_bar.set_multiimage(self._mi)
         if self._mi and len(self._mi) > 0:
             target = self._tools.get_target_index()
@@ -330,9 +334,36 @@ class MainWindow(QMainWindow):
     def _on_target_changed(self, idx):
         """Called when the user changes the target image selector."""
         self._mappings = None  # stale; force re-categorize
+        self._preview.clear_element_highlight()
         if self._mi and len(self._mi) > 0:
             ref = idx if (idx is not None and 0 <= idx < len(self._mi)) else 0
             self._tools.update_image_dimensions(self._mi[ref].width, self._mi[ref].height)
+
+    def _on_crop_preview(self, x: int, y: int, w: int, h: int):
+        """Affiche l'overlay de rognage en temps réel."""
+        if self._mi and len(self._mi) > 0:
+            target = self._tools.get_target_index()
+            self._preview.show_crop_overlay(x, y, w, h, target)
+
+    def _on_element_selected(self, elem_id):
+        """Met en évidence les pixels de l'élément sélectionné."""
+        if elem_id is None or not self._mappings or not self._mi:
+            self._preview.clear_element_highlight()
+            return
+        masks = []
+        for i, img in enumerate(self._mi):
+            m = self._mappings[i] if i < len(self._mappings) else {}
+            if elem_id in m:
+                ih, iw = img.pixels.shape[:2]
+                mask = np.zeros((ih, iw), dtype=bool)
+                pix_list = m[elem_id]["pixels"]
+                if len(pix_list) > 0:
+                    rows, cols = zip(*pix_list)
+                    mask[rows, cols] = True
+                masks.append(mask)
+            else:
+                masks.append(None)
+        self._preview.show_element_highlight(masks)
 
     def _apply_compress(self, level: int):
         if not self._guard(): return

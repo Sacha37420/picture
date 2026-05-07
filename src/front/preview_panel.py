@@ -9,7 +9,7 @@ index, dimensions and channel count.
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QImage, QPixmap
+from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import (
     QLabel,
     QScrollArea,
@@ -51,7 +51,11 @@ class _ImageCard(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
         layout.setSpacing(4)
 
+        self._pixels = pixels
         self._pixmap_orig = _array_to_pixmap(pixels)
+        self._current_width: int = 100
+        self._crop_rect: tuple | None = None      # (x, y, w, h) en coords image
+        self._highlight_mask: np.ndarray | None = None  # bool (H, W)
 
         self._img_label = QLabel()
         self._img_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -67,13 +71,63 @@ class _ImageCard(QWidget):
         layout.addWidget(info)
 
     def set_width(self, width: int):
-        """Scale the thumbnail to *width* pixels."""
+        self._current_width = width
+        self._refresh_display()
+
+    def _refresh_display(self):
         if self._pixmap_orig.isNull():
             return
-        scaled = self._pixmap_orig.scaledToWidth(
-            width, Qt.TransformationMode.SmoothTransformation
-        )
+        base = self._make_highlight_pixmap() if self._highlight_mask is not None else self._pixmap_orig
+        scaled = base.scaledToWidth(self._current_width, Qt.TransformationMode.SmoothTransformation)
+        if self._crop_rect is not None:
+            scaled = self._apply_crop_overlay(scaled)
         self._img_label.setPixmap(scaled)
+
+    def _make_highlight_pixmap(self) -> QPixmap:
+        """Pixmap avec les pixels hors-élément assombris à 20 %."""
+        arr = self._pixels.astype(np.float32)
+        arr[~self._highlight_mask] *= 0.20
+        np.clip(arr, 0, 255, out=arr)
+        return _array_to_pixmap(arr.astype(np.uint8))
+
+    def _apply_crop_overlay(self, scaled: QPixmap) -> QPixmap:
+        """Voile sombre en dehors du rect de rognage + bordure bleue."""
+        x, y, w, h = self._crop_rect
+        ih, iw = self._pixels.shape[:2]
+        sw, sh = scaled.width(), scaled.height()
+        sx  = int(x * sw / iw)
+        sy  = int(y * sh / ih)
+        sw2 = max(1, int(w * sw / iw))
+        sh2 = max(1, int(h * sh / ih))
+        result = QPixmap(scaled)
+        painter = QPainter(result)
+        dark = QColor(0, 0, 0, 150)
+        painter.fillRect(0,      0,      sw,        sy,        dark)
+        painter.fillRect(0,      sy+sh2, sw,        sh-sy-sh2, dark)
+        painter.fillRect(0,      sy,     sx,        sh2,       dark)
+        painter.fillRect(sx+sw2, sy,     sw-sx-sw2, sh2,       dark)
+        painter.setPen(QPen(QColor(89, 180, 250), 2))
+        painter.drawRect(sx, sy, sw2 - 1, sh2 - 1)
+        painter.end()
+        return result
+
+    # -- overlay API ---------------------------------------------------- #
+
+    def show_crop(self, x: int, y: int, w: int, h: int):
+        self._crop_rect = (x, y, w, h)
+        self._refresh_display()
+
+    def clear_crop(self):
+        self._crop_rect = None
+        self._refresh_display()
+
+    def show_element_highlight(self, mask: np.ndarray):
+        self._highlight_mask = mask
+        self._refresh_display()
+
+    def clear_element_highlight(self):
+        self._highlight_mask = None
+        self._refresh_display()
 
 
 class PreviewPanel(QWidget):
@@ -144,3 +198,29 @@ class PreviewPanel(QWidget):
         available_w = max(self._scroll.viewport().width() - 16, 100)
         for card in self._cards:
             card.set_width(available_w)
+
+    # -- overlay API ----------------------------------------------------- #
+
+    def show_crop_overlay(self, x: int, y: int, w: int, h: int, target: int | None = None):
+        for i, card in enumerate(self._cards):
+            if target is None or i == target:
+                card.show_crop(x, y, w, h)
+            else:
+                card.clear_crop()
+
+    def clear_crop_overlay(self):
+        for card in self._cards:
+            card.clear_crop()
+
+    def show_element_highlight(self, masks: list):
+        """masks[i] est un tableau bool (H,W) ou None pour la carte i."""
+        for i, card in enumerate(self._cards):
+            m = masks[i] if i < len(masks) else None
+            if m is not None:
+                card.show_element_highlight(m)
+            else:
+                card.clear_element_highlight()
+
+    def clear_element_highlight(self):
+        for card in self._cards:
+            card.clear_element_highlight()
