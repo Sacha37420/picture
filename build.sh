@@ -90,6 +90,8 @@ build_pyinstaller() {
         --windowed \
         --name "Picture" \
         --add-data "src${ADD_DATA_SEP}src" \
+        --collect-all pymupdf \
+        --hidden-import fitz \
         main.py
     echo "[OK] Binary: dist/Picture"
 }

@@ -108,7 +108,7 @@ build_exe_options = {
     # loaded from inside a zip archive – they must stay as loose files.
     # PIL also ships native extensions for the same reason.
     "zip_include_packages": "*",
-    "zip_exclude_packages": ["fitz", "pymupdf", "PIL"],
+    "zip_exclude_packages": ["fitz", "pymupdf", "PIL", "pandas", "matplotlib"],
 }
 
 # ------------------------------------------------------------------ #
