@@ -54,6 +54,18 @@ def _setup_logging() -> None:
     except Exception as exc:
         log.error("  fitz import FAILED: %s", exc, exc_info=True)
 
+    try:
+        import numpy
+        log.info("  numpy      : %s at %s", numpy.__version__, numpy.__file__)
+    except Exception as exc:
+        log.error("  numpy import FAILED: %s", exc, exc_info=True)
+
+    try:
+        import pandas
+        log.info("  pandas     : %s at %s", pandas.__version__, pandas.__file__)
+    except Exception as exc:
+        log.error("  pandas import FAILED: %s", exc, exc_info=True)
+
     log.info("=" * 60)
 
 

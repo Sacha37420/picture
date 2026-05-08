@@ -63,8 +63,8 @@ EXCLUDES = [
     "unittest",
     "email",
     # "html" intentionally NOT excluded – pymupdf.table imports it
-    "http",
-    "urllib",
+    # "http" intentionally NOT excluded – pandas.io imports it
+    # "urllib" intentionally NOT excluded – pandas.io.common imports urllib.parse
     "xmlrpc",
     "pydoc",
     "doctest",
@@ -108,7 +108,7 @@ build_exe_options = {
     # loaded from inside a zip archive – they must stay as loose files.
     # PIL also ships native extensions for the same reason.
     "zip_include_packages": "*",
-    "zip_exclude_packages": ["fitz", "pymupdf", "PIL", "pandas", "matplotlib"],
+    "zip_exclude_packages": ["fitz", "pymupdf", "PIL", "pandas", "matplotlib", "numpy"],
 }
 
 # ------------------------------------------------------------------ #

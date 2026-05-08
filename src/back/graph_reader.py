@@ -561,14 +561,18 @@ class GraphReader:
 
     @staticmethod
     def _check_imports() -> None:
+        import logging as _logging
+        _log = _logging.getLogger("picture.graph_reader")
         missing = []
         try:
             import pandas  # noqa: F401
-        except ImportError:
+        except Exception as _exc:
+            _log.error("pandas import FAILED: %s", _exc, exc_info=True)
             missing.append("pandas")
         try:
             import matplotlib  # noqa: F401
-        except ImportError:
+        except Exception as _exc:
+            _log.error("matplotlib import FAILED: %s", _exc, exc_info=True)
             missing.append("matplotlib")
         if missing:
             pkgs = " ".join(missing)
