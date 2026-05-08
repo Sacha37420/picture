@@ -16,9 +16,12 @@ in place (cumulative), then refreshes the preview.
 """
 from __future__ import annotations
 
+import logging
 import os
 import traceback
 from typing import List, Optional
+
+_log = logging.getLogger("picture.main_window")
 
 import numpy as np
 
@@ -66,6 +69,7 @@ class _LoadThread(QThread):
             for p in self._paths:
                 ext = os.path.splitext(p)[1].lower()
                 start = len(mi)
+                _log.debug("_LoadThread: loading '%s' (ext=%s)", p, ext)
                 if ext == ".pdf":
                     PdfReader(p, mi)
                 elif ext in _GRAPH_EXTS:
@@ -73,9 +77,12 @@ class _LoadThread(QThread):
                 else:
                     ImageReader(p, mi)
                 source_map[p] = list(range(start, len(mi)))
+                _log.debug("_LoadThread: '%s' → %d images", p, len(mi) - start)
             self.finished.emit(mi, source_map, "")
         except Exception:
-            self.finished.emit(None, None, traceback.format_exc())
+            tb = traceback.format_exc()
+            _log.error("_LoadThread: exception loading files:\n%s", tb)
+            self.finished.emit(None, None, tb)
 
 
 # ------------------------------------------------------------------ #

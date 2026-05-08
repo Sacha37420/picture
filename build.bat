@@ -28,11 +28,36 @@ echo.
 
 REM ── 0. Check Python ───────────────────────────────────────────────
 %PYTHON% --version >nul 2>&1
-if errorlevel 1 (
-    echo [ERROR] Python n'est pas trouve dans le PATH.
-    echo         Installez Python 3.10+ depuis https://python.org
-    exit /b 1
+if not errorlevel 1 goto :python_ok
+
+REM Python not in PATH – search common installation directories
+if exist "C:\ProgramData\miniconda3\python.exe" (
+    set "PYTHON=C:\ProgramData\miniconda3\python.exe"
+    goto :python_ok
 )
+if exist "%USERPROFILE%\miniconda3\python.exe" (
+    set "PYTHON=%USERPROFILE%\miniconda3\python.exe"
+    goto :python_ok
+)
+if exist "%USERPROFILE%\anaconda3\python.exe" (
+    set "PYTHON=%USERPROFILE%\anaconda3\python.exe"
+    goto :python_ok
+)
+if exist "C:\ProgramData\anaconda3\python.exe" (
+    set "PYTHON=C:\ProgramData\anaconda3\python.exe"
+    goto :python_ok
+)
+for /d %%D in ("%LOCALAPPDATA%\Programs\Python\Python3*") do (
+    if exist "%%D\python.exe" (
+        set "PYTHON=%%D\python.exe"
+        goto :python_ok
+    )
+)
+echo [ERROR] Python n'est pas trouve dans le PATH.
+echo         Installez Python 3.10+ depuis https://python.org
+exit /b 1
+
+:python_ok
 for /f "tokens=*" %%V in ('%PYTHON% --version 2^>^&1') do set "PY_VER=%%V"
 echo [OK] %PY_VER%
 
@@ -57,14 +82,16 @@ call "%VENV_DIR%\Scripts\activate.bat"
 
 REM ── 2. Install runtime deps ───────────────────────────────────────
 echo [INFO] Installation des dépendances runtime...
-pip install --quiet --upgrade pip
-pip install --quiet -r "%PROJECT_ROOT%requirements.txt"
+python -m pip install --quiet --upgrade pip
+pip install -r "%PROJECT_ROOT%requirements.txt"
 if errorlevel 1 ( echo [ERROR] Echec pip install requirements.txt ; exit /b 1 )
+echo [OK] Dépendances runtime installées.
 
 REM ── 3. Install build deps ─────────────────────────────────────────
 echo [INFO] Installation des dépendances de build...
-pip install --quiet -r "%PROJECT_ROOT%requirements-build.txt"
+pip install -r "%PROJECT_ROOT%requirements-build.txt"
 if errorlevel 1 ( echo [ERROR] Echec pip install requirements-build.txt ; exit /b 1 )
+echo [OK] Dépendances de build installées.
 
 REM ── 4. Clean previous dist ────────────────────────────────────────
 echo [INFO] Nettoyage des artefacts précédents...
@@ -145,6 +172,8 @@ pyinstaller --noconfirm ^
     --windowed ^
     --name "Picture" ^
     --add-data "src;src" ^
+    --collect-all pymupdf ^
+    --hidden-import fitz ^
     main.py
 if errorlevel 1 (
     echo [ERROR] PyInstaller a échoué.

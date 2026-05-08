@@ -35,7 +35,13 @@ INCLUDES = [
     "PIL",
     "PIL.Image",
     "numpy",
-    "fitz",                    # PyMuPDF
+    "fitz",                    # PyMuPDF (alias)
+    "pymupdf",                 # PyMuPDF >= 1.24 main package
+    "matplotlib",
+    "matplotlib.pyplot",
+    "matplotlib.backends.backend_qtagg",
+    "pandas",
+    "openpyxl",
     "src.back",
     "src.front",
 ]
@@ -45,6 +51,10 @@ PACKAGES = [
     "PIL",
     "numpy",
     "fitz",
+    "pymupdf",                 # PyMuPDF >= 1.24 main package
+    "matplotlib",
+    "pandas",
+    "openpyxl",
     "src",
 ]
 
@@ -52,7 +62,7 @@ EXCLUDES = [
     "tkinter",
     "unittest",
     "email",
-    "html",
+    # "html" intentionally NOT excluded – pymupdf.table imports it
     "http",
     "urllib",
     "xmlrpc",
@@ -68,9 +78,21 @@ INCLUDE_FILES = []
 # Include src/ package so relative imports work inside the frozen exe
 INCLUDE_FILES.append(("src", "src"))
 
-# Include icon if it exists
-if os.path.isfile(ICON_WIN):
-    INCLUDE_FILES.append((ICON_WIN, os.path.basename(ICON_WIN)))
+# Include the whole assets/ folder (icon.ico, icon.png, …)
+if os.path.isdir("assets"):
+    INCLUDE_FILES.append(("assets", "assets"))
+
+# PyMuPDF ships mupdfcpp64.dll *inside* its package directory (pymupdf/).
+# cx_Freeze only adds lib/ to the Windows DLL search path, not its
+# subdirectories, so the DLL must be duplicated at lib/ root level for
+# _mupdf.pyd and _extra.pyd to load correctly in the frozen executable.
+try:
+    import pymupdf as _pymupdf
+    _pymupdf_dir = Path(_pymupdf.__file__).parent
+    for _dll in _pymupdf_dir.glob("*.dll"):
+        INCLUDE_FILES.append((str(_dll), f"lib/{_dll.name}"))
+except Exception:
+    pass  # pymupdf not installed yet – will be caught at build time
 
 # ------------------------------------------------------------------ #
 # build_exe options                                                    #
@@ -82,8 +104,11 @@ build_exe_options = {
     "include_files": INCLUDE_FILES,
     "optimize":      1,          # .pyc optimisation level
     "build_exe":     "dist/exe", # output folder
+    # fitz/pymupdf (PyMuPDF) contain native .pyd extensions that cannot be
+    # loaded from inside a zip archive – they must stay as loose files.
+    # PIL also ships native extensions for the same reason.
     "zip_include_packages": "*",
-    "zip_exclude_packages": "",
+    "zip_exclude_packages": ["fitz", "pymupdf", "PIL"],
 }
 
 # ------------------------------------------------------------------ #
@@ -145,7 +170,7 @@ _icon = ICON_WIN if sys.platform == "win32" and os.path.isfile(ICON_WIN) else (
 executables = [
     Executable(
         script      = "main.py",
-        base        = "Win32GUI" if sys.platform == "win32" else None,
+        base        = "gui" if sys.platform == "win32" else None,
         target_name = f"{NAME}.exe" if sys.platform == "win32" else NAME,
         icon        = _icon,
         copyright   = f"© {AUTHOR}" if AUTHOR else None,

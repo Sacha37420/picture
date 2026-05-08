@@ -97,6 +97,11 @@ def ensure_dependencies() -> None:
     If any are missing, prompt the user and install them via pip.
     Exits with code 1 if the user declines or installation fails.
     """
+    # When running as a frozen/compiled executable (cx_Freeze, PyInstaller…)
+    # all dependencies are already bundled – skip the check entirely.
+    if getattr(sys, "frozen", False):
+        return
+
     missing = _missing()
     if not missing:
         return

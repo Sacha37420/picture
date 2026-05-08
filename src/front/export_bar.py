@@ -7,8 +7,11 @@ Shows an estimated file size that updates when the format changes.
 from __future__ import annotations
 
 import io
+import logging
 import os
 from typing import Optional
+
+_log = logging.getLogger("picture.export_bar")
 
 from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
@@ -69,6 +72,7 @@ def _estimate_size(mi: MultiImage, fmt: str, page_format: str = "A4") -> int:
             doc.close()
             total = buf.tell()
         except Exception:
+            _log.error("_estimate_size (PDF): fitz error", exc_info=True)
             total = 0
     else:
         pillow_fmt = _PILLOW_FMT.get(fmt, "PNG")
@@ -116,6 +120,7 @@ class ExportBar(QWidget):
 
         self._fmt_combo = QComboBox()
         self._fmt_combo.addItems(_FORMATS)
+        self._fmt_combo.setCurrentText("PDF")
         self._fmt_combo.currentTextChanged.connect(self._on_format_changed)
         self._fmt_combo.setFixedWidth(90)
         layout.addWidget(self._fmt_combo)
@@ -173,16 +178,22 @@ class ExportBar(QWidget):
         if self._mi is None or len(self._mi) == 0:
             return
         fmt = self._fmt_combo.currentText()
+        _log.debug("ExportBar._on_save: format=%s", fmt)
         if fmt == "PDF":
             path, _ = QFileDialog.getSaveFileName(
                 self, "Enregistrer le PDF", "", "PDF (*.pdf)"
             )
             if path:
-                PdfWriter(
-                    self._mi,
-                    path,
-                    page_format=self._page_combo.currentText(),
-                )
+                try:
+                    PdfWriter(
+                        self._mi,
+                        path,
+                        page_format=self._page_combo.currentText(),
+                    )
+                    _log.info("ExportBar: PDF saved to '%s'", path)
+                except Exception:
+                    _log.error("ExportBar: PDF save FAILED for '%s'", path, exc_info=True)
+                    raise
         else:
             directory = QFileDialog.getExistingDirectory(
                 self, "Choisir le dossier de destination"

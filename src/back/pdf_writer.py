@@ -18,9 +18,12 @@ Standard page widths in points (1 pt = 1/72 inch)
 from __future__ import annotations
 
 import io
+import logging
 from typing import Optional
 
 from .multiimage import MultiImage
+
+_log = logging.getLogger("picture.pdf_writer")
 
 # Standard page widths in points
 PAGE_WIDTHS_PT = {
@@ -89,9 +92,12 @@ class PdfWriter:
         dpi: int,
         page_format: str,
     ) -> None:
+        _log.debug("PdfWriter._write: output='%s' format=%s dpi=%d", output_path, page_format, dpi)
         try:
             import fitz  # PyMuPDF
+            _log.debug("PdfWriter: fitz imported OK (%s)", fitz.__file__)
         except ImportError as exc:
+            _log.error("PdfWriter: fitz import FAILED", exc_info=True)
             raise ImportError(
                 "PyMuPDF is required for PDF writing.  "
                 "Install it with:  pip install pymupdf"
@@ -128,5 +134,6 @@ class PdfWriter:
                 )
 
             doc.save(output_path, garbage=4, deflate=True)
+            _log.debug("PdfWriter: saved '%s' (%d pages)", output_path, len(multiimage))
         finally:
             doc.close()

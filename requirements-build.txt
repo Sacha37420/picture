@@ -1,3 +1,6 @@
 # Build / packaging dependencies (not needed at runtime)
-cx_Freeze>=7.2.0
-pyinstaller>=6.6.0   ; sys_platform != "darwin" or True   # optional fallback
+# cx_Freeze 8.1.0+ is required: it ships the pymupdf hook that fixes
+# circular imports (_wxcolors, utils) introduced in PyMuPDF >= 1.24.11.
+# 8.2.0+ is recommended for PyMuPDF 1.25+ (_wxcolors fix released in 8.1.0).
+cx_Freeze>=8.1.0
+pyinstaller>=6.6.0
