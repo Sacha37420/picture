@@ -1,10 +1,20 @@
 # Runtime dependencies
+#
 # Qt binding – install ONE of the following (priority order used at runtime):
-#   PyQt6>=6.6.0   (recommended)
-#   PyQt5>=5.15.0
-#   PySide6>=6.6.0
-#   PySide2>=5.15.0
-#   PyQt4           (legacy – Python 3.x wheel required, e.g. from riverbankcomputing.com)
+#   PyQt6>=6.6.0   (recommended – requires SSE4.1/SSE4.2)
+#   PyQt5>=5.15.0  (requires SSE4.1/SSE4.2)
+#   PySide6>=6.6.0 (requires SSE4.1/SSE4.2)
+#   PySide2>=5.15.0(requires SSE4.1/SSE4.2)
+#   PyQt4           (legacy – no SSE4 requirement; Python 3.x wheel from riverbankcomputing.com)
+#
+# On old CPUs without SSE4 (e.g. Puppy Linux on a Pentium/Atom):
+#   Use the system package manager instead of pip:
+#     sudo apt-get install python3-pyqt5   # Debian/Ubuntu/Puppy dpkg-based
+#     sudo dnf install python3-qt5         # Fedora/RHEL
+#     sudo pacman -S python-pyqt5          # Arch/Manjaro
+#   Or install PyQt4:
+#     pip install PyQt4  # needs a Python 3-compatible wheel
+#
 PyQt6>=6.6.0
 Pillow>=10.3.0
 numpy>=1.26.0

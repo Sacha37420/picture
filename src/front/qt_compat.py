@@ -6,6 +6,33 @@ Tries Qt bindings in this priority order:
   2. PyQt5   – scoped-enum shims added to match PyQt6 API
   3. PySide6 – Signal aliased as pyqtSignal
   4. PySide2 – Signal aliased as pyqtSignal + scoped-enum shims
+  5. PyQt4   – scoped-enum shims; imports from QtGui (no QtWidgets module)
+
+CPU compatibility
+-----------------
+Recent PyPI wheels for PyQt6, PyQt5, PySide6, and PySide2 are compiled with
+SSE4.1/SSE4.2 enabled.  Qt calls qFatal() at startup on CPUs that lack these
+instructions, which kills the process before Python can catch anything.
+
+When SSE4.1/SSE4.2 are not detected (Linux /proc/cpuinfo) each binding is
+first probed in a short-lived subprocess.  Only bindings whose probe succeeds
+are actually imported into the main process.  PyQt4 (Qt4) has no SSE4
+requirement and is therefore tried without a probe.
+
+On very old hardware the recommended install path is the *system* package
+manager, not PyPI wheels::
+
+    # Debian / Ubuntu / Puppy dpkg-based
+    sudo apt-get install python3-pyqt5
+
+    # RPM-based (Fedora, openSUSE …)
+    sudo dnf install python3-qt5
+
+    # Arch / Manjaro
+    sudo pacman -S python-pyqt5
+
+These are compiled against the distro's minimum CPU target and will not
+have the SSE4 restriction.
 
 All callers use the single import::
 
@@ -23,6 +50,9 @@ and use PyQt6-style scoped enums everywhere (e.g. ``Qt.AlignmentFlag.AlignCenter
 """
 from __future__ import annotations
 
+import platform as _platform
+import subprocess as _subprocess
+import sys as _sys
 from types import SimpleNamespace as _NS
 
 
@@ -32,9 +62,70 @@ def _ns(**kw):
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# CPU feature detection
+# ──────────────────────────────────────────────────────────────────────────────
+
+def _cpu_has_sse4() -> bool:
+    """Return True if the CPU reports SSE4.1 and SSE4.2 support.
+
+    Only meaningful on Linux where /proc/cpuinfo is available.
+    Returns True unconditionally on other platforms (macOS, Windows) because
+    modern wheels for those platforms already presuppose a recent CPU.
+    """
+    if _platform.system() != "Linux":
+        return True
+    try:
+        with open("/proc/cpuinfo") as _f:
+            for _line in _f:
+                if _line.startswith("flags"):
+                    return "sse4_1" in _line and "sse4_2" in _line
+    except OSError:
+        pass
+    return False  # no flags line found → assume old CPU
+
+
+_SSE4: bool = _cpu_has_sse4()
+
+
+def _qt_import_safe(module_root: str) -> bool:
+    """Probe whether *module_root* can be imported without crashing the process.
+
+    Qt calls qFatal() when CPU instructions are missing, which kills the
+    process before Python can raise an exception.  This helper runs the
+    import in a disposable subprocess so the main process stays alive.
+
+    Only invoked when _SSE4 is False (old CPU).
+    """
+    try:
+        r = _subprocess.run(
+            [_sys.executable, "-c", f"import {module_root}; print('ok')"],
+            capture_output=True,
+            text=True,
+            timeout=15,
+        )
+        return r.returncode == 0 and "ok" in r.stdout
+    except Exception:
+        return False
+
+
+def _skip_if_unsafe(module_root: str) -> None:
+    """Raise ImportError if *module_root* would crash on this CPU.
+
+    No-op when _SSE4 is True (fast path for modern hardware).
+    """
+    if not _SSE4 and not _qt_import_safe(module_root):
+        raise ImportError(
+            f"{module_root} wheel requires SSE4.1/SSE4.2 which this CPU lacks. "
+            "Install Qt via your system package manager instead of pip "
+            "(e.g.  sudo apt-get install python3-pyqt5)."
+        )
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 1 · PyQt6
 # ──────────────────────────────────────────────────────────────────────────────
 try:
+    _skip_if_unsafe("PyQt6")
     from PyQt6.QtCore import Qt, QThread, pyqtSignal
     from PyQt6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
     from PyQt6.QtWidgets import (
@@ -69,6 +160,7 @@ try:
 # ──────────────────────────────────────────────────────────────────────────────
 except ImportError:
     try:
+        _skip_if_unsafe("PyQt5")
         from PyQt5.QtCore import Qt as _Qt5, QThread, pyqtSignal
         from PyQt5.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
         from PyQt5.QtWidgets import (
@@ -208,6 +300,7 @@ except ImportError:
     # ──────────────────────────────────────────────────────────────────────────
     except ImportError:
         try:
+            _skip_if_unsafe("PySide6")
             from PySide6.QtCore import Qt, QThread
             from PySide6.QtCore import Signal as pyqtSignal  # type: ignore[no-redef]
             from PySide6.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
@@ -243,6 +336,7 @@ except ImportError:
         # ──────────────────────────────────────────────────────────────────────
         except ImportError:
             try:
+                _skip_if_unsafe("PySide2")
                 from PySide2.QtCore import Qt as _Qt2, QThread
                 from PySide2.QtCore import Signal as pyqtSignal  # type: ignore[no-redef]
                 from PySide2.QtGui import QColor, QIcon, QImage, QPainter, QPen, QPixmap
