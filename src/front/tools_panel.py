@@ -16,9 +16,10 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import (
+from .qt_compat import (
+    Qt,
+    pyqtSignal,
+    QColor,
     QCheckBox,
     QColorDialog,
     QComboBox,

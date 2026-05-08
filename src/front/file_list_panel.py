@@ -15,9 +15,10 @@ from __future__ import annotations
 import os
 from typing import List
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QIcon
-from PyQt6.QtWidgets import (
+from .qt_compat import (
+    Qt,
+    pyqtSignal,
+    QIcon,
     QFileDialog,
     QHBoxLayout,
     QLabel,

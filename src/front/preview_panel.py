@@ -8,9 +8,13 @@ index, dimensions and channel count.
 """
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
-from PyQt6.QtWidgets import (
+from .qt_compat import (
+    Qt,
+    QColor,
+    QImage,
+    QPainter,
+    QPen,
+    QPixmap,
     QLabel,
     QScrollArea,
     QSizePolicy,

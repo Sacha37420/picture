@@ -25,8 +25,10 @@ _log = logging.getLogger("picture.main_window")
 
 import numpy as np
 
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtWidgets import (
+from .qt_compat import (
+    Qt,
+    QThread,
+    pyqtSignal,
     QFrame,
     QLabel,
     QMainWindow,

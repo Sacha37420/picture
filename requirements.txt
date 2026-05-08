@@ -1,4 +1,10 @@
 # Runtime dependencies
+# Qt binding – install ONE of the following (priority order used at runtime):
+#   PyQt6>=6.6.0   (recommended)
+#   PyQt5>=5.15.0
+#   PySide6>=6.6.0
+#   PySide2>=5.15.0
+#   PyQt4           (legacy – Python 3.x wheel required, e.g. from riverbankcomputing.com)
 PyQt6>=6.6.0
 Pillow>=10.3.0
 numpy>=1.26.0

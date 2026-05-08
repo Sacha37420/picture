@@ -13,8 +13,8 @@ from typing import Optional
 
 _log = logging.getLogger("picture.export_bar")
 
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtWidgets import (
+from .qt_compat import (
+    pyqtSignal,
     QComboBox,
     QFileDialog,
     QHBoxLayout,
