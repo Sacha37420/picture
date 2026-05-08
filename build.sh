@@ -51,8 +51,8 @@ source "$VENV_DIR/bin/activate"
 # ── install deps ──────────────────────────────────────────────────
 echo "[INFO] Installing runtime dependencies..."
 pip install --quiet --upgrade pip
-pip install --quiet -r "$PROJECT_ROOT/requirements.txt"
-
+pip install --quiet -r "$PROJECT_ROOT/requirements.txt"# NOTE – vieux CPU sans SSE4 : commenter PyQt6 dans requirements.txt et lancer :
+#   sudo apt-get install python3-pyqt5  (ou dnf/pacman selon la distro)
 echo "[INFO] Installing build dependencies..."
 pip install --quiet -r "$PROJECT_ROOT/requirements-build.txt"
 

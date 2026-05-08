@@ -16,6 +16,11 @@
 #     pip install PyQt4  # needs a Python 3-compatible wheel
 #
 PyQt6>=6.6.0
+# ⚠ Vieux CPU sans SSE4 (ex. Puppy Linux) : commenter la ligne PyQt6 ci-dessus
+#   et installer Qt via le gestionnaire de paquets :
+#     sudo apt-get install python3-pyqt5   # Debian/Ubuntu/Puppy
+#     sudo dnf install python3-qt5         # Fedora/RHEL
+#     sudo pacman -S python-pyqt5          # Arch/Manjaro
 Pillow>=10.3.0
 numpy>=1.26.0
 pymupdf>=1.24.0
